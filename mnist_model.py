@@ -32,40 +32,34 @@ class ClsNet(nn.Module):
         return F.log_softmax(self.cnn(x), dim=1)
 
 
-# get rotate theta
+# get affine theta
 class LocNet(nn.Module):
 
     def __init__(self):
         super(LocNet, self).__init__()
-        self.cnn = CNN(1)
+        self.cnn = CNN(6)
 
         # zero init
-        bias = torch.zeros(1)
+        bias = torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float)
         self.cnn.fc2.bias.data.copy_(bias)
         self.cnn.fc2.weight.data.zero_()
 
     def forward(self, x):
         batch_size = x.size()[0]
         theta = self.cnn(x)
-        return theta.view(batch_size)
+        return theta.view(batch_size, -1)
 
 
-# rotate
-class RotateGridGen(nn.Module):
+# affine 
+class AffineGridGen(nn.Module):
     
     def __init__(self):
-        super(RotateGridGen, self).__init__()
+        super(AffineGridGen, self).__init__()
 
     def forward(self, theta, out_size):
-        assert len(theta.size()) == 1
+        assert len(theta.size()) == 2
         assert type(out_size) == torch.Size
-        batch_size = theta.size()[0]
-        affine_mat = theta.new(batch_size, 2, 3)
-        affine_mat[:, :, 2] = 0
-        affine_mat[:, 0, 0] = torch.cos(theta)
-        affine_mat[:, 1, 1] = torch.cos(theta)
-        affine_mat[:, 0, 1] = -torch.sin(theta)
-        affine_mat[:, 1, 0] = torch.sin(theta)
+        affine_mat = theta.view(-1, 2, 3)
         grid = F.affine_grid(affine_mat, out_size)
         return grid
 
@@ -77,7 +71,7 @@ class STNClsNet(nn.Module):
         super(STNClsNet, self).__init__()
 
         self.loc_net = LocNet()
-        self.rotate = RotateGridGen()
+        self.rotate = AffineGridGen()
         self.cls_net = ClsNet()
 
     def forward(self, x):
